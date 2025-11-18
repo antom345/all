@@ -270,42 +270,13 @@ Answer STRICTLY as JSON, without any extra text:
         translation = word
 
     if not example_translation and example:
-        example_translation = translate_sentence_to_russian(language, example)
+        example_translation = translation
 
     return TranslateResponse(
         translation=translation,
         example=example,
         example_translation=example_translation,
     )
-
-
-def translate_sentence_to_russian(language: str, sentence: str) -> str:
-    """Fallback: переводит целое предложение на русский."""
-
-    if not sentence:
-        return ""
-
-    system_prompt = (
-        "You are a professional translator. "
-        f"Translate the following sentence from {language} to Russian. "
-        "Answer with the translation only, without any additional text."
-    )
-
-    try:
-        completion = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": sentence},
-            ],
-            temperature=0,
-        )
-
-        translation = completion.choices[0].message.content or ""
-        return translation.strip()
-    except Exception:
-        # если вдруг не удалось получить перевод, лучше вернуть оригинал
-        return sentence
 
 
 # ---------- FastAPI приложение ----------
