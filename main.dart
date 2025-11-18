@@ -589,7 +589,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (word.isEmpty) return;
 
     try {
-      final uri = Uri.parse('http://172.86.88.21:8000/translate_word');
+      final uri = Uri.parse('http://172.86.88.21:8000/translate-word');
 
       final body = jsonEncode({
         'word': word,
