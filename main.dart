@@ -597,16 +597,44 @@ class _ChatScreenState extends State<ChatScreen> {
         'target_language': 'Russian',
       });
 
-      final resp = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: body,
-      );
+      Map<String, dynamic>? data;
+      int? lastStatusCode;
+      Object? lastError;
 
-      if (resp.statusCode != 200) {
+      for (final endpoint in endpoints) {
+        try {
+          final uri = Uri.parse('$baseUrl$endpoint');
+          final resp = await http.post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: body,
+          );
+
+          if (resp.statusCode == 200) {
+            data = jsonDecode(resp.body) as Map<String, dynamic>;
+            break;
+          }
+
+          lastStatusCode = resp.statusCode;
+
+          // для 404 пробуем следующий эндпоинт, остальные ошибки прерывают цикл
+          if (resp.statusCode != 404) {
+            break;
+          }
+        } catch (e) {
+          lastError = e;
+        }
+      }
+
+      if (data == null) {
         if (!mounted) return;
+        final message = lastError != null
+            ? 'Translation error: $lastError'
+            : (lastStatusCode != null
+                ? 'Translation error: $lastStatusCode'
+                : 'Translation error: unknown');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Translation error: ${resp.statusCode}')),
+          SnackBar(content: Text(message)),
         );
         return;
       }
