@@ -589,7 +589,8 @@ class _ChatScreenState extends State<ChatScreen> {
     if (word.isEmpty) return;
 
     try {
-      final uri = Uri.parse('http://172.86.88.21:8000/translate_word');
+      const baseUrl = 'http://172.86.88.21:8000';
+      final endpoints = ['/translate-word', '/translate_word'];
 
       final body = jsonEncode({
         'word': word,
@@ -597,23 +598,54 @@ class _ChatScreenState extends State<ChatScreen> {
         'target_language': 'Russian',
       });
 
-      final resp = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: body,
-      );
+      Map<String, dynamic>? data;
+      int? lastStatusCode;
+      Object? lastError;
 
-      if (resp.statusCode != 200) {
+      for (final endpoint in endpoints) {
+        try {
+          final uri = Uri.parse('$baseUrl$endpoint');
+          final resp = await http.post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: body,
+          );
+
+          if (resp.statusCode == 200) {
+            data = jsonDecode(resp.body) as Map<String, dynamic>;
+            break;
+          }
+
+          lastStatusCode = resp.statusCode;
+
+          // для 404 пробуем следующий эндпоинт, остальные ошибки прерывают цикл
+          if (resp.statusCode != 404) {
+            break;
+          }
+        } catch (e) {
+          lastError = e;
+        }
+      }
+
+      if (data == null) {
         if (!mounted) return;
+        final message = lastError != null
+            ? 'Translation error: $lastError'
+            : (lastStatusCode != null
+                ? 'Translation error: $lastStatusCode'
+                : 'Translation error: unknown');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Translation error: ${resp.statusCode}')),
+          SnackBar(content: Text(message)),
         );
         return;
       }
 
-      final data = jsonDecode(resp.body) as Map<String, dynamic>;
-      final translation = data['translation'] as String? ?? 'нет данных';
-      final example = data['example'] as String? ?? 'нет примера';
+      final responseData = data;
+      final translation =
+          responseData['translation'] as String? ?? 'нет данных';
+      final example = responseData['example'] as String? ?? 'нет примера';
+      final exampleTranslation = responseData['example_translation'] as String? ??
+          'нет перевода примера';
 
       if (!mounted) return;
 
@@ -633,6 +665,19 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               const SizedBox(height: 4),
               Text(example),
+              const SizedBox(height: 8),
+              Text(
+                'Перевод примера:',
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                exampleTranslation,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Colors.grey.shade700),
+              ),
             ],
           ),
           actions: [
