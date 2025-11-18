@@ -635,11 +635,6 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               const SizedBox(height: 4),
               Text(example),
-              const SizedBox(height: 8),
-              Text(
-                'Перевод примера:',
-                style: Theme.of(context).textTheme.labelMedium,
-              ),
               const SizedBox(height: 4),
               Text(
                 exampleTranslation,
