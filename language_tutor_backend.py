@@ -48,6 +48,7 @@ class TranslateRequest(BaseModel):
 class TranslateResponse(BaseModel):
     translation: str
     example: str
+    example_translation: str
 
 
 # ---------- Вспомогательные функции ----------
@@ -227,14 +228,16 @@ def call_openai_translate(language: str, word: str) -> TranslateResponse:
 
     system_prompt = f"""
 You are a translator.
-Your task: translate ONE word or a very short phrase from {language} to Russian
-and give ONE short example sentence in {language} with this word.
+Your task: translate ONE word or a very short phrase from {language} to Russian,
+give ONE short example sentence in {language} with this word,
+and ALSO translate that example sentence to Russian.
 
 Answer STRICTLY as JSON, without any extra text:
 
 {{
   "translation": "перевод на русский",
-  "example": "short example sentence in {language} with this word"
+  "example": "short example sentence in {language} with this word",
+  "example_translation": "перевод примера на русский"
 }}
 """.strip()
 
@@ -251,19 +254,58 @@ Answer STRICTLY as JSON, without any extra text:
 
     translation = ""
     example = ""
+    example_translation = ""
     try:
         data = json.loads(content)
         translation = str(data.get("translation", "")).strip()
         example = str(data.get("example", "")).strip()
+        example_translation = str(data.get("example_translation", "")).strip()
     except Exception:
         # fallback: просто отдать весь текст в перевод
         translation = content.strip()
         example = ""
+        example_translation = ""
 
     if not translation:
         translation = word
 
-    return TranslateResponse(translation=translation, example=example)
+    if not example_translation and example:
+        example_translation = translate_sentence_to_russian(language, example)
+
+    return TranslateResponse(
+        translation=translation,
+        example=example,
+        example_translation=example_translation,
+    )
+
+
+def translate_sentence_to_russian(language: str, sentence: str) -> str:
+    """Fallback: переводит целое предложение на русский."""
+
+    if not sentence:
+        return ""
+
+    system_prompt = (
+        "You are a professional translator. "
+        f"Translate the following sentence from {language} to Russian. "
+        "Answer with the translation only, without any additional text."
+    )
+
+    try:
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": sentence},
+            ],
+            temperature=0,
+        )
+
+        translation = completion.choices[0].message.content or ""
+        return translation.strip()
+    except Exception:
+        # если вдруг не удалось получить перевод, лучше вернуть оригинал
+        return sentence
 
 
 # ---------- FastAPI приложение ----------
@@ -301,10 +343,21 @@ async def chat_endpoint(payload: ChatRequest):
     return call_openai_chat(payload, partner_name)
 
 
-@app.post("/translate-word", response_model=TranslateResponse)
-async def translate_word_endpoint(payload: TranslateRequest):
+def _perform_translation(payload: TranslateRequest) -> TranslateResponse:
     lang = payload.language or "English"
     return call_openai_translate(lang, payload.word)
+
+
+@app.post("/translate-word", response_model=TranslateResponse)
+async def translate_word_endpoint(payload: TranslateRequest):
+    return _perform_translation(payload)
+
+
+@app.post("/translate_word", response_model=TranslateResponse)
+async def translate_word_endpoint_legacy(payload: TranslateRequest):
+    """Совместимость со старым фронтендом, который использует underscore."""
+
+    return _perform_translation(payload)
 
 
 # ---------- Локальный запуск ----------
